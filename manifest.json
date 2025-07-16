@@ -1,0 +1,23 @@
+
+{
+  "short_name": "MMPS Connect",
+  "name": "MMPS Connect - School Management Portal",
+  "description": "A comprehensive school management portal for administrators, teachers, parents, and students.",
+  "icons": [
+    {
+      "src": "/icons/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#6366F1",
+  "background_color": "#ffffff"
+}
