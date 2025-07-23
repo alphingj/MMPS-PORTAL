@@ -1,12 +1,7 @@
-
-
 import { supabase } from './supabaseClient';
 import type { Student, Teacher, Announcement, SchoolEvent, TransportRoute, Exam, Role, AttendanceRecord, BusStop, Result, TeacherPermissions } from '../types';
 
 // Helper to convert Supabase data (snake_case) to our frontend types (camelCase)
-function fromSupabase(data: any[]): any[];
-function fromSupabase(data: Record<string, any>): Record<string, any>;
-function fromSupabase(data: any): any;
 function fromSupabase(data: any): any {
     if (data === null || typeof data !== 'object') {
         return data;
@@ -26,9 +21,6 @@ function fromSupabase(data: any): any {
 
 
 // Helper to convert our frontend types (camelCase) to Supabase data (snake_case)
-function toSupabase(data: any[]): any[];
-function toSupabase(data: Record<string, any>): Record<string, any>;
-function toSupabase(data: any): any;
 function toSupabase(data: any): any {
     if (data === null || typeof data !== 'object') {
         return data;
@@ -204,31 +196,21 @@ const dbTeacherToAppTeacher = (dbTeacher: any): Teacher => {
 // Helper to flatten the app's Teacher object for Supabase
 const appTeacherToDbPayload = (teacherData: Partial<Teacher>): any => {
     const { permissions, ...rest } = teacherData;
-    const flattenedData = { ...rest, ...permissions };
     
-    const dbPayload = {
-      ...flattenedData,
-      ...(permissions && {
-          canManageStudents: permissions.manageStudents,
-          canManageTeachers: permissions.manageTeachers,
-          canManageAnnouncements: permissions.manageAnnouncements,
-          canManageEvents: permissions.manageEvents,
-          canCreateExams: permissions.manageExams,
-          canManageAttendance: permissions.manageAttendance,
-          canViewAllResults: permissions.viewAllResults,
-          fullAdminAccess: permissions.fullAdminAccess,
-      }),
-    };
+    // Create payload from teacher data fields, excluding permissions object
+    const dbPayload: Record<string, any> = { ...rest };
     
-    // Remove the frontend-only permission keys
-    delete dbPayload.manageStudents;
-    delete dbPayload.manageTeachers;
-    delete dbPayload.manageAnnouncements;
-    delete dbPayload.manageEvents;
-    delete dbPayload.manageExams;
-    delete dbPayload.manageAttendance;
-    delete dbPayload.viewAllResults;
-    delete dbPayload.fullAdminAccess;
+    // Flatten permissions object into can_... fields
+    if (permissions) {
+        dbPayload.canManageStudents = permissions.manageStudents;
+        dbPayload.canManageTeachers = permissions.manageTeachers;
+        dbPayload.canManageAnnouncements = permissions.manageAnnouncements;
+        dbPayload.canManageEvents = permissions.manageEvents;
+        dbPayload.canCreateExams = permissions.manageExams;
+        dbPayload.canManageAttendance = permissions.manageAttendance;
+        dbPayload.canViewAllResults = permissions.viewAllResults;
+        dbPayload.fullAdminAccess = permissions.fullAdminAccess;
+    }
 
     return toSupabase(dbPayload);
 };
