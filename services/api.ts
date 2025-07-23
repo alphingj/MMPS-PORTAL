@@ -4,7 +4,10 @@ import { supabase } from './supabaseClient';
 import type { Student, Teacher, Announcement, SchoolEvent, TransportRoute, Exam, Role, AttendanceRecord, BusStop, Result, TeacherPermissions } from '../types';
 
 // Helper to convert Supabase data (snake_case) to our frontend types (camelCase)
-const fromSupabase = (data: any): any => {
+function fromSupabase(data: any[]): any[];
+function fromSupabase(data: Record<string, any>): Record<string, any>;
+function fromSupabase(data: any): any;
+function fromSupabase(data: any): any {
     if (data === null || typeof data !== 'object') {
         return data;
     }
@@ -19,11 +22,14 @@ const fromSupabase = (data: any): any => {
         }
     }
     return camelCaseObject;
-};
+}
 
 
 // Helper to convert our frontend types (camelCase) to Supabase data (snake_case)
-const toSupabase = (data: any): any => {
+function toSupabase(data: any[]): any[];
+function toSupabase(data: Record<string, any>): Record<string, any>;
+function toSupabase(data: any): any;
+function toSupabase(data: any): any {
     if (data === null || typeof data !== 'object') {
         return data;
     }
@@ -38,7 +44,7 @@ const toSupabase = (data: any): any => {
         }
     }
     return snakeCaseObject;
-};
+}
 
 
 // --- Auth ---
