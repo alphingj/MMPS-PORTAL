@@ -1,8 +1,14 @@
 // supabase/functions/manage-user/index.ts
-/// <reference lib="deno.ns" />
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.44.4'
+
+// Declare Deno for TypeScript's sake, it will be provided by the Deno runtime.
+declare const Deno: {
+  env: {
+    get: (key: string) => string | undefined;
+  };
+};
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
