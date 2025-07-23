@@ -16,17 +16,19 @@ export interface User {
 
 export interface Student {
     id: string;
-    rollNumber: string;
+    rollNumber: string; // Used as the login username
     fullName: string;
+    email: string; // Required for the auth user
+    password?: string; // For setting/updating password from admin form
     class: string;
     section: string;
     parentName: string;
     parentPhone: string;
-    loginPassword?: string;
     address: string;
     dateOfBirth: string;
     admissionDate: string;
     status: 'active' | 'inactive';
+    userId?: string;
 }
 
 export interface TeacherPermissions {
@@ -43,17 +45,18 @@ export interface TeacherPermissions {
 export interface Teacher {
     id: string;
     employeeId: string;
+    username: string; // The login username
     fullName: string;
+    email: string; // Required for the auth user
+    password?: string; // For setting/updating password from admin form
     subject: string;
     phone: string;
-    email: string;
     qualification: string;
     experience: number;
     joiningDate: string;
-    username: string;
-    password?: string;
     status: 'active' | 'inactive';
     permissions: TeacherPermissions;
+    userId?: string;
 }
 
 export interface Announcement {
@@ -104,6 +107,7 @@ export interface Exam {
     date: string;
     maxMarks: number;
     type: 'Weekly Test' | 'Monthly Test' | 'Unit Test' | 'Quarterly Exam' | 'Half Yearly Exam' | 'Annual Exam';
+    createdByTeacherId?: string;
 }
 
 export type AttendanceStatus = 'Present' | 'Absent' | 'Late' | 'Excused';
@@ -112,4 +116,11 @@ export interface AttendanceRecord {
     studentId: string;
     status: AttendanceStatus;
     remarks: string;
+}
+
+export interface Result {
+    id: string;
+    studentId: string;
+    examId: string;
+    marksObtained: number;
 }

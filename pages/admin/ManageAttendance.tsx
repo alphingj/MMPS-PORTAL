@@ -1,8 +1,10 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../hooks/useAppContext';
 import { ALL_CLASSES, ATTENDANCE_STATUSES } from '../../constants';
 import { AttendanceRecord, Student } from '../../types';
 import { Save } from '../../components/ui/Icons';
+import * as api from '../../services/api';
 
 const AttendanceStat = ({ label, value, color }: { label: string, value: number, color: string }) => (
     <div className={`p-4 rounded-lg text-center ${color}`}>
@@ -20,20 +22,30 @@ const ManageAttendance: React.FC = () => {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [loadedStudents, setLoadedStudents] = useState<Student[]>([]);
     const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const handleLoadStudents = () => {
+    const handleLoadStudents = async () => {
+        setIsLoading(true);
         const studentsInClass = students.filter(s => 
             s.class === selectedClass && 
             (selectedSection ? s.section.toLowerCase() === selectedSection.toLowerCase() : true)
         );
         setLoadedStudents(studentsInClass);
         
-        const existingRecords = attendance[selectedDate] || [];
-        const recordsForClass = studentsInClass.map(student => {
-            const existing = existingRecords.find(r => r.studentId === student.id);
-            return existing || { studentId: student.id, status: ATTENDANCE_STATUSES[0], remarks: '' };
-        });
-        setAttendanceRecords(recordsForClass);
+        const studentIds = studentsInClass.map(s => s.id);
+        try {
+            const existingRecords = await api.getAttendance(selectedDate, studentIds);
+            const recordsForClass = studentsInClass.map(student => {
+                const existing = existingRecords.find(r => r.studentId === student.id);
+                return existing || { studentId: student.id, status: ATTENDANCE_STATUSES[0], remarks: '' };
+            });
+            setAttendanceRecords(recordsForClass);
+        } catch (error) {
+            console.error("Failed to load attendance:", error);
+            alert("Error: Could not load existing attendance records.");
+        } finally {
+            setIsLoading(false);
+        }
     };
     
     const handleStatusChange = (studentId: string, status: AttendanceRecord['status']) => {
@@ -44,9 +56,18 @@ const ManageAttendance: React.FC = () => {
         setAttendanceRecords(prev => prev.map(rec => rec.studentId === studentId ? { ...rec, remarks } : rec));
     };
     
-    const handleSaveAttendance = () => {
-        dispatch({ type: 'SAVE_ATTENDANCE', payload: { date: selectedDate, records: attendanceRecords }});
-        alert('Attendance saved successfully!');
+    const handleSaveAttendance = async () => {
+        setIsLoading(true);
+        try {
+            await api.saveAttendance(selectedDate, attendanceRecords);
+            dispatch({ type: 'SAVE_ATTENDANCE', payload: { date: selectedDate, records: attendanceRecords }});
+            alert('Attendance saved successfully!');
+        } catch (error) {
+            console.error("Failed to save attendance:", error);
+            alert(`Error: Could not save attendance. ${(error as Error).message}`);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const attendanceSummary = useMemo(() => {
@@ -85,8 +106,8 @@ const ManageAttendance: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
                         <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
                     </div>
-                    <button onClick={handleLoadStudents} disabled={!selectedClass || !selectedDate} className="px-4 py-2 bg-gray-800 text-white font-semibold rounded-lg hover:bg-gray-900 disabled:bg-gray-400">
-                        Load Students
+                    <button onClick={handleLoadStudents} disabled={!selectedClass || !selectedDate || isLoading} className="px-4 py-2 bg-gray-800 text-white font-semibold rounded-lg hover:bg-gray-900 disabled:bg-gray-400">
+                        {isLoading ? 'Loading...' : 'Load Students'}
                     </button>
                 </div>
             </div>
@@ -97,8 +118,8 @@ const ManageAttendance: React.FC = () => {
                         <h2 className="text-lg font-semibold">
                             Attendance for {selectedClass} {selectedSection} - {new Date(selectedDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
                         </h2>
-                        <button onClick={handleSaveAttendance} className="inline-flex items-center px-4 py-2 bg-brand-purple text-white font-semibold rounded-lg hover:bg-indigo-700">
-                            <Save size={16} className="mr-2" /> Save Attendance
+                        <button onClick={handleSaveAttendance} disabled={isLoading} className="inline-flex items-center px-4 py-2 bg-brand-purple text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400">
+                            <Save size={16} className="mr-2" /> {isLoading ? 'Saving...' : 'Save Attendance'}
                         </button>
                     </div>
                     

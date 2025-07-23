@@ -1,320 +1,290 @@
 
-# MMPS Connect - School Management Portal
+# MMPS Connect - Full Deployment Guide
 
-This is a comprehensive school management portal built with React, TypeScript, and Tailwind CSS. It provides separate dashboards and functionalities for administrators, teachers, and students.
+This is the complete guide to deploying the MMPS Connect school management portal. Follow these steps precisely to get your application and its secure backend live on Vercel and Supabase.
 
-## Tech Stack
+## Architecture Overview
 
-- **Frontend:** React 18+, TypeScript, Tailwind CSS
-- **Routing:** React Router (`HashRouter`)
-- **Icons:** Lucide React
-- **State Management:** React Context API with `useReducer`
-- **PWA:** Service Worker for an offline-first App Shell
-- **Backend (Recommended):** Supabase (PostgreSQL)
-- **Deployment (Recommended):** Vercel
-
-## Features
-
-- **Progressive Web App (PWA):** The app can be installed on mobile (Android/iOS) and desktop. It uses an "App Shell" model, meaning the main application interface loads instantly, even offline. Data-related operations require an active internet connection to ensure information is always up-to-date.
-- **Multi-Role System:** Distinct portals for Admins, Teachers, and Parents/Students.
-- **Admin Dashboard:** Full control over students, teachers, announcements, events, exams, attendance, results, and transport.
-- **Teacher Dashboard:** Manage assigned classes, create exams, mark attendance, and upload results.
-- **Student Dashboard:** View attendance, results, announcements, and school events.
-- **Public Pages:** View school-wide announcements and transport details without logging in.
-- **CRUD Operations:** Comprehensive Create, Read, Update, Delete functionalities for all management sections.
-
-## Progressive Web App (PWA) Support
-
-This application is configured as a PWA using a robust **App Shell** caching strategy. Here’s how it works:
-- **Instant Loading:** The core user interface (the "shell") is cached on your device. This makes the app load instantly on subsequent visits, similar to a native app.
-- **Offline Shell:** The application shell will load and be visible even without an internet connection.
-- **Fresh Data:** All dynamic data (student lists, announcements, etc.) and application logic are always fetched from the network. This ensures that users are always interacting with the most current information, which is critical for a database-driven application. An internet connection is required for any data-related tasks.
-
-### How to Add App Icons
-
-For the "Add to Home Screen" feature to work correctly with your branding, you must provide your own set of app icons. Create a folder named `icons` in the root directory of the project and add the following files. You can use an online PWA icon generator to create these from a single source image.
-
-- `/icons/icon-192x192.png` (for Android)
-- `/icons/icon-512x512.png` (for Android splash screens)
-- `/icons/apple-touch-icon.png` (for iOS, preferably 180x180)
-
-The paths are already configured in `manifest.json` and `index.html`.
-
-## Local Development
-
-To run this project locally, follow these steps:
-
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository_url>
-    cd <repository_directory>
-    ```
-
-2.  **Install dependencies:**
-    This project is pre-configured to use libraries via CDN (Tailwind CSS) or assumes they are available in the execution environment (`react`, `react-dom`, `lucide-react`, `react-router-dom`). If you are setting up a local build environment (e.g., with Vite or Create React App), you would run:
-    ```bash
-    npm install
-    ```
-    You would also need to install the libraries mentioned:
-    ```bash
-    npm install react react-dom react-router-dom lucide-react
-    npm install -D @types/react @types/react-dom tailwindcss postcss autoprefixer
-    ```
-
-3.  **Start the development server:**
-    ```bash
-    npm run dev 
-    ```
-    (Or `npm start` depending on your setup)
-
-The application currently runs on mock data located in `data/mock.ts`. All interactions are simulated locally.
+-   **Frontend:** React 18, TypeScript, Vite, React Router, Tailwind CSS. Deployed on Vercel.
+-   **Backend & Database:** Supabase PostgreSQL.
+-   **Secure Operations:** User and password management is handled by a secure Supabase Edge Function, which is essential for protecting your master API keys.
 
 ---
 
-## Deployment Guide: Vercel & Supabase
+### **Phase 1: Set Up Your Supabase Backend**
 
-This guide explains how to deploy the application to Vercel and connect it to a real PostgreSQL database using the Supabase integration.
+This phase creates your new, empty, and secure database.
 
-### Default Credentials
+**Step 1: Create the Supabase Project**
+1.  Go to the [Vercel & Supabase integration page](https://vercel.com/integrations/supabase).
+2.  Click **"Add Integration"** and connect it to your Vercel account.
+3.  Choose to create a **new Supabase project**.
+4.  Give it a name (e.g., `mmps-portal-live`), choose a region close to you, and create the project.
+5.  Once the project is created, navigate to your new project's dashboard in Supabase.
+6.  Go to **Project Settings** (the gear icon in the left menu) > **API**.
+7.  Find and copy two things. **Keep them safe in a notepad for a later step:**
+    *   **Project URL:** It will look like `https://your-project-id.supabase.co`.
+    *   **`anon` `public` key:** This is a long string of letters and numbers.
 
--   **Admin Username:** `principal@mmps`
--   **Admin Password:** `Moby@2025_`
--   **Teacher/Student Password (for mock):** `password`
+**Step 2: Create the Database Tables**
+1.  In your Supabase project dashboard, go to the **SQL Editor** (the icon that looks like a sheet of paper with `<>`).
+2.  Click **"+ New query"** or **"New SQL Snippet"**.
+3.  **Copy the entire block of code below** and paste it into the editor.
 
-### Step 1: Set up Supabase
+    ```sql
+    -- schema.sql for MMPS Connect
 
-1.  **Create a Vercel Account:** If you don't have one, sign up at [vercel.com](https://vercel.com).
+    -- Profiles table to link auth users to roles and usernames
+    CREATE TABLE profiles (
+      id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+      username TEXT UNIQUE NOT NULL,
+      full_name TEXT,
+      role TEXT NOT NULL CHECK (role IN ('admin', 'teacher', 'student')),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
 
-2.  **Create a Supabase Project via Vercel:**
-    - Go to the [Supabase integration page on Vercel](https://vercel.com/integrations/supabase).
-    - Click "Add Integration".
-    - Follow the prompts to connect your Vercel account and create a new Supabase project. Choose a region close to your users.
+    -- Students Table
+    CREATE TABLE students (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      roll_number TEXT UNIQUE NOT NULL,
+      full_name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      class TEXT NOT NULL,
+      section TEXT,
+      parent_name TEXT,
+      parent_phone TEXT,
+      address TEXT,
+      date_of_birth DATE,
+      admission_date DATE,
+      status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'deactivated')),
+      user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE
+    );
 
-3.  **Get Supabase Credentials:**
-    - Once your project is created, navigate to your project's dashboard on [supabase.com](https://supabase.com).
-    - Go to **Project Settings** (the gear icon in the left sidebar).
-    - Select the **API** tab.
-    - You will find your **Project URL** and your **Project API Keys**. You will need the `anon` `public` key.
+    -- Teachers Table
+    CREATE TABLE teachers (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      employee_id TEXT UNIQUE NOT NULL,
+      username TEXT UNIQUE NOT NULL,
+      full_name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      subject TEXT,
+      phone TEXT,
+      qualification TEXT,
+      experience_years INT,
+      joining_date DATE,
+      status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'deactivated')),
+      user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+      can_manage_students BOOLEAN DEFAULT FALSE,
+      can_manage_teachers BOOLEAN DEFAULT FALSE,
+      can_manage_events BOOLEAN DEFAULT FALSE,
+      can_view_all_results BOOLEAN DEFAULT FALSE,
+      can_manage_attendance BOOLEAN DEFAULT FALSE,
+      can_create_exams BOOLEAN DEFAULT FALSE,
+      can_manage_announcements BOOLEAN DEFAULT FALSE,
+      full_admin_access BOOLEAN DEFAULT FALSE
+    );
 
-4.  **Create Database Tables:**
-    - In your Supabase project dashboard, navigate to the **SQL Editor** (the icon with `<>` that says "SQL").
-    - Click **+ New query**.
-    - Copy the entire SQL script from the `schema.sql` section below and paste it into the editor.
-    - Click **RUN** to create all the necessary tables and relationships.
-
-5.  **Create the Admin User:**
-    - Go to **Authentication** > **Users** in your Supabase dashboard.
-    - Click **+ Add user** and create the admin user with the email `principal@mmps` and password `Moby@2025_`.
-    - This is crucial for the admin login to work with a real backend.
-
-#### `schema.sql`
-
-```sql
--- schema.sql for MMPS Connect
-
--- Users table for authentication
--- Note: Supabase handles this via its auth.users table. 
--- We create a profiles table to link auth users to roles.
-CREATE TABLE profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  username TEXT UNIQUE,
-  full_name TEXT,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'teacher', 'student')),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Students Table
-CREATE TABLE students (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  roll_number TEXT UNIQUE NOT NULL,
-  full_name TEXT NOT NULL,
-  class TEXT NOT NULL,
-  section TEXT,
-  parent_name TEXT,
-  parent_phone TEXT,
-  address TEXT,
-  date_of_birth DATE,
-  admission_date DATE,
-  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'deactivated')),
-  -- Link to auth user for student login
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL
-);
-
--- Teachers Table
-CREATE TABLE teachers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  employee_id TEXT UNIQUE NOT NULL,
-  full_name TEXT NOT NULL,
-  subject TEXT,
-  phone TEXT,
-  email TEXT UNIQUE,
-  qualification TEXT,
-  experience_years INT,
-  joining_date DATE,
-  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'deactivated')),
-  -- Link to auth user for teacher login
-  user_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  -- Permissions
-  can_manage_students BOOLEAN DEFAULT FALSE,
-  can_manage_teachers BOOLEAN DEFAULT FALSE,
-  can_manage_events BOOLEAN DEFAULT FALSE,
-  can_view_all_results BOOLEAN DEFAULT FALSE,
-  can_manage_attendance BOOLEAN DEFAULT FALSE,
-  can_create_exams BOOLEAN DEFAULT FALSE,
-  can_manage_announcements BOOLEAN DEFAULT FALSE,
-  full_admin_access BOOLEAN DEFAULT FALSE
-);
-
-
--- Announcements Table
-CREATE TABLE announcements (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title TEXT NOT NULL,
-  content TEXT,
-  date DATE NOT NULL,
-  category TEXT,
-  priority TEXT,
-  target_audience TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Events Table
-CREATE TABLE events (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  title TEXT NOT NULL,
-  description TEXT,
-  category TEXT,
-  date_time TIMESTAMPTZ NOT NULL,
-  venue TEXT,
-  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive'))
-);
-
--- Transport Routes Table
-CREATE TABLE transport_routes (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  route_number TEXT NOT NULL,
-  route_name TEXT,
-  driver_name TEXT,
-  driver_phone TEXT,
-  vehicle_number TEXT,
-  monthly_fee INT,
-  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive'))
-);
-
--- Bus Stops Table
-CREATE TABLE bus_stops (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  route_id UUID REFERENCES transport_routes(id) ON DELETE CASCADE,
-  stop_name TEXT NOT NULL,
-  stop_time TIME
-);
-
--- Exams Table
-CREATE TABLE exams (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  exam_name TEXT NOT NULL,
-  subject TEXT,
-  class TEXT,
-  section TEXT,
-  exam_date DATE,
-  max_marks INT,
-  exam_type TEXT,
-  created_by_teacher_id UUID REFERENCES teachers(id)
-);
-
--- Attendance Table
-CREATE TABLE attendance (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_id UUID REFERENCES students(id) ON DELETE CASCADE,
-  date DATE NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late', 'excused')),
-  remarks TEXT,
-  UNIQUE(student_id, date) -- Ensure one entry per student per day
-);
-
--- Results Table
-CREATE TABLE results (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_id UUID REFERENCES students(id) ON DELETE CASCADE,
-  exam_id UUID REFERENCES exams(id) ON DELETE CASCADE,
-  marks_obtained INT,
-  UNIQUE(student_id, exam_id)
-);
-```
-
-### Step 2: Deploy to Vercel
-
-1.  **Push to Git:** Push your project code to a GitHub, GitLab, or Bitbucket repository.
-
-2.  **Import Project in Vercel:**
-    - On your Vercel dashboard, click **Add New...** > **Project**.
-    - Select your Git repository. Vercel will automatically detect that it's a React project.
-
-3.  **Configure Environment Variables:**
-    - In your project's settings in Vercel, go to the **Environment Variables** tab.
-    - Add the following two variables:
-      - `VITE_SUPABASE_URL`: Paste the **Project URL** from your Supabase API settings.
-      - `VITE_SUPABASE_ANON_KEY`: Paste the `anon` `public` **Project API Key** from Supabase.
-    - **Note:** The `VITE_` prefix is standard for Vite apps to expose variables to the browser. If you use Create React App, the prefix is `REACT_APP_`. Adjust accordingly.
-
-4.  **Deploy:** Click the **Deploy** button. Vercel will build and deploy your application.
-
-### Step 3: Connect Frontend to Supabase
-
-To make the application use your new Supabase backend instead of mock data, you'll need to make the following changes.
-
-1.  **Install Supabase Client:**
-    ```bash
-    npm install @supabase/supabase-js
+    -- Other tables
+    CREATE TABLE announcements ( id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT NOT NULL, content TEXT, date DATE NOT NULL, category TEXT, priority TEXT, target_audience TEXT, created_at TIMESTAMPTZ DEFAULT NOW() );
+    CREATE TABLE events ( id UUID PRIMARY KEY DEFAULT gen_random_uuid(), title TEXT NOT NULL, description TEXT, category TEXT, date_time TIMESTAMPTZ NOT NULL, venue TEXT, status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')) );
+    CREATE TABLE transport_routes ( id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_number TEXT NOT NULL, route_name TEXT, driver_name TEXT, driver_phone TEXT, vehicle_number TEXT, monthly_fee INT, status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')) );
+    CREATE TABLE bus_stops ( id UUID PRIMARY KEY DEFAULT gen_random_uuid(), route_id UUID REFERENCES transport_routes(id) ON DELETE CASCADE, stop_name TEXT NOT NULL, stop_time TIME );
+    CREATE TABLE exams ( id UUID PRIMARY KEY DEFAULT gen_random_uuid(), exam_name TEXT NOT NULL, subject TEXT, class TEXT, section TEXT, exam_date DATE, max_marks INT, exam_type TEXT, created_by_teacher_id UUID REFERENCES teachers(id) );
+    CREATE TABLE attendance ( id UUID PRIMARY KEY DEFAULT gen_random_uuid(), student_id UUID REFERENCES students(id) ON DELETE CASCADE, date DATE NOT NULL, status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late', 'excused')), remarks TEXT, UNIQUE(student_id, date) );
+    CREATE TABLE results ( id UUID PRIMARY KEY DEFAULT gen_random_uuid(), student_id UUID REFERENCES students(id) ON DELETE CASCADE, exam_id UUID REFERENCES exams(id) ON DELETE CASCADE, marks_obtained INT, UNIQUE(student_id, exam_id) );
     ```
+4.  Click the green **"RUN"** button. You should see a "Success" message.
 
-2.  **Create a Supabase Client file:**
-    Create a new file `services/supabaseClient.ts`:
+---
+
+### **Phase 2: Deploy the Secure Backend Function (Critical Step)**
+
+This is the most important step for security. It creates the backend service that lets your app manage users without exposing your master key.
+
+**Step 3: Install and Link the Supabase CLI**
+1.  **Install the CLI:** If you haven't already, open a terminal on your computer and install the Supabase CLI. Instructions are [here](https://supabase.com/docs/guides/cli/getting-started).
+2.  **Login:** Run `supabase login` in your terminal and follow the prompts.
+3.  **Link Project:** Navigate to your project's code folder in the terminal and run the link command:
+    `supabase link --project-ref YOUR_PROJECT_ID`
+    *(You find `YOUR_PROJECT_ID` in your Supabase project's URL: `https://supabase.com/dashboard/project/YOUR_PROJECT_ID`)*
+
+**Step 4: Create and Deploy the Edge Function**
+1.  **Create Function:** In your terminal, run: `supabase functions new manage-user`
+2.  This creates a folder `supabase/functions/manage-user/`. Open the `index.ts` file inside it.
+3.  **Delete everything** in that file and **replace it with this exact code:**
+
     ```typescript
-    import { createClient } from '@supabase/supabase-js';
+    // supabase/functions/manage-user/index.ts
+    /// <reference lib="deno.ns" />
 
-    const supabaseUrl = process.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY;
+    import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.44.4'
 
-    if (!supabaseUrl || !supabaseAnonKey) {
-        throw new Error("Supabase URL or Anon Key is missing from environment variables.");
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     }
 
-    export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-    ```
+    serve(async (req) => {
+      if (req.method === 'OPTIONS') {
+        return new Response('ok', { headers: corsHeaders })
+      }
 
-3.  **Update API Service file:**
-    - Go to `services/api.ts`.
-    - Import the `supabase` client.
-    - Replace the mock data functions with actual calls to your Supabase database.
+      try {
+        const supabaseAdmin = createClient(
+          Deno.env.get('SUPABASE_URL') ?? '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        )
 
-    **Example: Replacing `getStudents`**
-    ```typescript
-    // In services/api.ts
+        const { action, userData } = await req.json()
+        if (!action || !userData) throw new Error("Action and userData are required.");
 
-    import { supabase } from './supabaseClient'; // Add this import
-    import type { Student } from '../types'; // Ensure types are imported
-
-    // ... other imports
-
-    // Current mock function:
-    // export const getStudents = async (): Promise<Student[]> => { ... };
-
-    // NEW Supabase function:
-    export const getStudents = async (): Promise<Student[]> => {
-        const { data, error } = await supabase
-            .from('students')
-            .select('*');
-
-        if (error) {
-            console.error('Error fetching students:', error);
-            throw error;
+        let responseData;
+        switch (action) {
+          case 'CREATE': {
+            const { data, error } = await supabaseAdmin.auth.admin.createUser({
+              email: userData.email,
+              password: userData.password,
+              email_confirm: true,
+            })
+            if (error) throw error
+            responseData = data.user;
+            break;
+          }
+          case 'UPDATE': {
+            if (!userData.id) throw new Error("User ID is required for update.");
+            const updatePayload: { email?: string; password?: string } = {};
+            if (userData.email) updatePayload.email = userData.email;
+            if (userData.password) updatePayload.password = userData.password;
+            
+            const { data, error } = await supabaseAdmin.auth.admin.updateUserById(userData.id, updatePayload);
+            if (error) throw error
+            responseData = data.user;
+            break;
+          }
+          case 'DELETE': {
+             if (!userData.id) throw new Error("User ID is required for delete.");
+             const { data, error } = await supabaseAdmin.auth.admin.deleteUser(userData.id);
+             if (error) throw error
+             responseData = { message: "User deleted successfully." };
+             break;
+          }
+          default:
+            throw new Error(`Invalid action: ${action}`);
         }
 
-        // You might need to map the data to match your frontend types if column names differ
-        return data as Student[];
-    };
+        return new Response(JSON.stringify(responseData), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        })
+      } catch (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        })
+      }
+    })
     ```
-    You will need to do this for all functions in `api.ts` (`getTeachers`, `createStudent`, `updateEvent`, etc.), mapping them to their corresponding Supabase queries. Authentication would also be handled by Supabase Auth methods (`supabase.auth.signInWithPassword`, `supabase.auth.signOut`).
+4.  **Deploy Function:** Back in your terminal, run: `supabase functions deploy`
 
-After making these changes and redeploying to Vercel, your application will be a fully functional, data-persistent school management portal.
+---
+
+### **Phase 3: Deploy the Frontend to Vercel**
+
+**Step 5: Deploy on Vercel**
+1.  Push all the latest application code to a GitHub repository.
+2.  On your Vercel dashboard, **"Add New... -> Project"** and import your repository.
+3.  Expand the **"Environment Variables"** section.
+4.  Add the two variables you saved from Step 1:
+    *   **Key:** `VITE_SUPABASE_URL` | **Value:** (Your Project URL)
+    *   **Key:** `VITE_SUPABASE_ANON_KEY` | **Value:** (Your `anon` `public` key)
+5.  Click **Deploy**.
+
+---
+
+### **Phase 4: Create First Admin & Secure the Database**
+
+Your application is live, but no users exist yet. You must create the first admin manually.
+
+**Step 6: Create Your Admin User**
+1.  Go to your Supabase project's **Authentication** page.
+2.  Click **"+ Add user"** and create the user:
+    *   **Email:** `principal@mmps`
+    *   **Password:** `Moby@2025_`
+3.  Now, go to the **Table Editor** page and click the **`profiles`** table.
+4.  Click **"+ Insert row"**.
+5.  Go back to the **Authentication** page and copy the `UID` of the user you just created.
+6.  Paste the `UID` into the `id` field of your new profile row.
+7.  Fill in the rest of the profile:
+    *   **username:** `principal`
+    *   **full_name:** `Moby Mathew`
+    *   **role:** `admin`
+8.  Click **Save**.
+
+**Step 7: Secure Your Database with RLS (Critical)**
+Row Level Security (RLS) is essential to prevent unauthorized data access. The following policies will secure your tables while ensuring admins have full control and the public can view necessary information.
+
+1.  In your Supabase project dashboard, go to the **SQL Editor**.
+2.  Click **"+ New query"**.
+3.  **Copy the entire block of code below** and paste it into the editor. This will enable RLS and create all necessary security policies at once. It is safe to run this multiple times.
+
+    ```sql
+    -- This script enables Row Level Security (RLS) and sets up complete, working policies.
+    -- It grants full access to admins, allows public read access where needed,
+    -- and lets authenticated users manage their own data.
+    
+    -- 0. Drop old, potentially incorrect policies if they exist
+    DROP POLICY IF EXISTS "Public profiles are viewable by everyone." ON public.profiles;
+    DROP POLICY IF EXISTS "Users can insert their own profile." ON public.profiles;
+    DROP POLICY IF EXISTS "Users can update own profile." ON public.profiles;
+    DROP POLICY IF EXISTS "Admins can do anything." ON public.students;
+    DROP POLICY IF EXISTS "Admins can do anything." ON public.teachers;
+
+    -- 1. Create helper function to get a user's role
+    CREATE OR REPLACE FUNCTION get_user_role()
+    RETURNS text AS $$
+      SELECT role FROM public.profiles WHERE id = auth.uid()
+    $$ LANGUAGE sql STABLE;
+
+    -- 2. Enable RLS on all tables
+    ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.teachers ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.transport_routes ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.bus_stops ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.exams ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.results ENABLE ROW LEVEL SECURITY;
+
+    -- 3. Policies for 'profiles' table
+    CREATE POLICY "Admin full access on profiles" ON public.profiles FOR ALL
+      USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+    CREATE POLICY "Users can view all profiles" ON public.profiles FOR SELECT
+      USING (auth.role() = 'authenticated');
+    CREATE POLICY "User can insert own profile" ON public.profiles FOR INSERT
+      WITH CHECK (auth.uid() = id);
+    CREATE POLICY "User can update own profile" ON public.profiles FOR UPDATE
+      USING (auth.uid() = id);
+
+    -- 4. Admin full access policies for all other data tables
+    CREATE POLICY "Admin full access on students" ON public.students FOR ALL USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+    CREATE POLICY "Admin full access on teachers" ON public.teachers FOR ALL USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+    CREATE POLICY "Admin full access on announcements" ON public.announcements FOR ALL USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+    CREATE POLICY "Admin full access on events" ON public.events FOR ALL USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+    CREATE POLICY "Admin full access on transport" ON public.transport_routes FOR ALL USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+    CREATE POLICY "Admin full access on bus_stops" ON public.bus_stops FOR ALL USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+    CREATE POLICY "Admin full access on exams" ON public.exams FOR ALL USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+    CREATE POLICY "Admin full access on attendance" ON public.attendance FOR ALL USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+    CREATE POLICY "Admin full access on results" ON public.results FOR ALL USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+
+    -- 5. Public read-access policies
+    CREATE POLICY "Public can read announcements" ON public.announcements FOR SELECT USING (true);
+    CREATE POLICY "Public can read events" ON public.events FOR SELECT USING (true);
+    CREATE POLICY "Public can read transport routes" ON public.transport_routes FOR SELECT USING (true);
+    CREATE POLICY "Public can read bus stops" ON public.bus_stops FOR SELECT USING (true);
+    ```
+4.  Click the green **"RUN"** button. You should see a "Success" message.
+
+**You are now finished.** Your application is fully deployed, secure, and ready to use. Log in with the `principal` username and `Moby@2025_` password. Changes made by the admin will now be saved permanently.

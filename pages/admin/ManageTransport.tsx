@@ -1,9 +1,11 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../hooks/useAppContext';
 import { TransportRoute, BusStop } from '../../types';
 import Modal from '../../components/ui/Modal';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
 import { Search, Plus, Edit, Trash2 } from '../../components/ui/Icons';
+import * as api from '../../services/api';
 
 const RouteForm = ({ route, onSave, onCancel }: { route?: TransportRoute | null, onSave: (data: Partial<TransportRoute>) => void, onCancel: () => void }) => {
     const [formData, setFormData] = useState<Partial<TransportRoute>>(
@@ -28,9 +30,11 @@ const RouteForm = ({ route, onSave, onCancel }: { route?: TransportRoute | null,
         }
     };
     
-    const handleStopChange = (index: number, field: keyof BusStop, value: string) => {
+    const handleStopChange = (index: number, field: keyof Omit<BusStop, 'id'>, value: string) => {
         const updatedStops = [...(formData.stops || [])];
-        updatedStops[index] = { ...updatedStops[index], [field]: value };
+        const stopToUpdate = { ...updatedStops[index] };
+        (stopToUpdate as any)[field] = value;
+        updatedStops[index] = stopToUpdate;
         setFormData({ ...formData, stops: updatedStops });
     };
 
@@ -65,7 +69,7 @@ const RouteForm = ({ route, onSave, onCancel }: { route?: TransportRoute | null,
                 <h3 className="text-lg font-medium text-gray-900 mb-2">Bus Stops & Timings</h3>
                 <div className="space-y-2">
                 {(formData.stops || []).map((stop, index) => (
-                    <div key={index} className="flex items-center gap-2">
+                    <div key={stop.id || index} className="flex items-center gap-2">
                         <input type="text" placeholder="Stop name" value={stop.name} onChange={e => handleStopChange(index, 'name', e.target.value)} className="flex-grow px-3 py-2 border border-gray-300 rounded-md" />
                         <input type="text" placeholder="e.g., 7:30 AM" value={stop.time} onChange={e => handleStopChange(index, 'time', e.target.value)} className="w-32 px-3 py-2 border border-gray-300 rounded-md" />
                         <button type="button" onClick={() => removeStop(index)} className="px-3 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200">Remove</button>
@@ -117,23 +121,32 @@ const ManageTransport: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure you want to delete this transport route?')) {
-            dispatch({ type: 'DELETE_ROUTE', payload: id });
+            try {
+                await api.deleteTransportRoute(id);
+                dispatch({ type: 'DELETE_ROUTE', payload: id });
+            } catch (error) {
+                console.error("Failed to delete route:", error);
+                alert("Error: Could not delete route.");
+            }
         }
     };
     
-    const handleSave = (data: Partial<TransportRoute>) => {
-        if (editingRoute) {
-            dispatch({ type: 'UPDATE_ROUTE', payload: { ...editingRoute, ...data } as TransportRoute });
-        } else {
-            const newRoute: TransportRoute = {
-                id: `tr${Date.now()}`,
-                ...data,
-            } as TransportRoute;
-            dispatch({ type: 'ADD_ROUTE', payload: newRoute });
+    const handleSave = async (data: Partial<TransportRoute>) => {
+        try {
+            if (editingRoute) {
+                const updated = await api.updateTransportRoute(editingRoute.id, data);
+                if (updated) dispatch({ type: 'UPDATE_ROUTE', payload: updated });
+            } else {
+                const newRoute = await api.addTransportRoute(data);
+                if (newRoute) dispatch({ type: 'ADD_ROUTE', payload: newRoute });
+            }
+            setIsModalOpen(false);
+        } catch (error) {
+            console.error("Failed to save route:", error);
+            alert("Error: Could not save route.");
         }
-        setIsModalOpen(false);
     };
 
     return (

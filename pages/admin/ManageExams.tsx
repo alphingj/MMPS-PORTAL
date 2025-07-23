@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../hooks/useAppContext';
 import { Exam } from '../../types';
@@ -5,6 +6,7 @@ import Modal from '../../components/ui/Modal';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
 import { Search, Plus, Edit, Trash2 } from '../../components/ui/Icons';
 import { ALL_CLASSES, EXAM_TYPES } from '../../constants';
+import * as api from '../../services/api';
 
 const ExamForm = ({ exam, onSave, onCancel }: { exam?: Exam | null, onSave: (data: Partial<Exam>) => void, onCancel: () => void }) => {
     const [formData, setFormData] = useState<Partial<Exam>>(
@@ -43,7 +45,7 @@ const ExamForm = ({ exam, onSave, onCancel }: { exam?: Exam | null, onSave: (dat
                 <Input label="Exam Date" name="date" type="date" value={formData.date} onChange={handleChange} />
                 <Input label="Maximum Marks" name="maxMarks" type="number" value={formData.maxMarks} onChange={handleChange} />
             </div>
-            <Select label="Exam Type" name="type" value={formData.type} onChange={handleChange} options={EXAM_TYPES} />
+            <Select label="Exam Type" name="type" value={formData.type as string} onChange={handleChange} options={EXAM_TYPES} />
             <div className="flex justify-end space-x-3 pt-4">
                 <button type="button" onClick={onCancel} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
                 <button type="submit" className="px-4 py-2 bg-brand-purple text-white rounded-md hover:bg-indigo-700">Save Exam</button>
@@ -59,7 +61,7 @@ const Input = (props: React.InputHTMLAttributes<HTMLInputElement> & { label: str
     </div>
 );
 
-const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement> & { label: string, options: readonly string[] }) => (
+const Select = (props: React.SelectHTMLAttributes<HTMLSelectElement> & { label: string, options: readonly string[] | string[] }) => (
     <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">{props.label}</label>
         <select {...props} className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-purple focus:border-brand-purple sm:text-sm">
@@ -79,8 +81,8 @@ const ManageExams: React.FC = () => {
     const filteredExams = useMemo(() => {
         return exams.filter(e =>
             e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            e.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            e.class.toLowerCase().includes(searchQuery.toLowerCase())
+            (e.subject && e.subject.toLowerCase().includes(searchQuery.toLowerCase())) ||
+            (e.class && e.class.toLowerCase().includes(searchQuery.toLowerCase()))
         );
     }, [exams, searchQuery]);
 
@@ -94,23 +96,32 @@ const ManageExams: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure you want to delete this exam? This might affect existing results.')) {
-            dispatch({ type: 'DELETE_EXAM', payload: id });
+            try {
+                await api.deleteExam(id);
+                dispatch({ type: 'DELETE_EXAM', payload: id });
+            } catch (error) {
+                console.error("Failed to delete exam:", error);
+                alert("Error: Could not delete exam.");
+            }
         }
     };
     
-    const handleSave = (data: Partial<Exam>) => {
-        if (editingExam) {
-            dispatch({ type: 'UPDATE_EXAM', payload: { ...editingExam, ...data } as Exam });
-        } else {
-            const newExam: Exam = {
-                id: `exam${Date.now()}`,
-                ...data,
-            } as Exam;
-            dispatch({ type: 'ADD_EXAM', payload: newExam });
+    const handleSave = async (data: Partial<Exam>) => {
+        try {
+            if (editingExam) {
+                const updated = await api.updateExam(editingExam.id, data);
+                if (updated) dispatch({ type: 'UPDATE_EXAM', payload: updated });
+            } else {
+                const newExam = await api.addExam(data);
+                if(newExam) dispatch({ type: 'ADD_EXAM', payload: newExam });
+            }
+            setIsModalOpen(false);
+        } catch (error) {
+            console.error("Failed to save exam:", error);
+            alert("Error: Could not save exam.");
         }
-        setIsModalOpen(false);
     };
 
     return (

@@ -1,11 +1,13 @@
 
-import React, { createContext, useReducer, Dispatch, ReactNode } from 'react';
-import type { User, Student, Teacher, Announcement, SchoolEvent, TransportRoute, Exam, AttendanceRecord } from '../types';
-import { Role } from '../types';
-import { MOCK_STUDENTS, MOCK_TEACHERS, MOCK_ADMIN, MOCK_ANNOUNCEMENTS, MOCK_EVENTS, MOCK_TRANSPORT_ROUTES, MOCK_EXAMS, MOCK_ATTENDANCE } from '../data/mock';
+import React, { createContext, useReducer, Dispatch, ReactNode, useEffect, useState } from 'react';
+import type { User, Student, Teacher, Announcement, SchoolEvent, TransportRoute, Exam, AttendanceRecord, Result } from '../types';
+import * as api from '../services/api';
+import { supabase } from '../services/supabaseClient';
 import { useLocalStorage } from '../hooks/useLocalStorage';
+import { Role } from '../types';
 
 interface AppState {
+  appReady: boolean;
   user: User | null;
   students: Student[];
   teachers: Teacher[];
@@ -14,17 +16,19 @@ interface AppState {
   transportRoutes: TransportRoute[];
   exams: Exam[];
   attendance: { [date: string]: AttendanceRecord[] };
+  results: Result[];
 }
 
 type Action =
+  | { type: 'SET_INITIAL_DATA'; payload: Partial<AppState> }
   | { type: 'LOGIN'; payload: { user: User } }
   | { type: 'LOGOUT' }
   | { type: 'ADD_STUDENT'; payload: Student }
   | { type: 'UPDATE_STUDENT'; payload: Student }
-  | { type: 'DELETE_STUDENT'; payload: string }
+  | { type: 'DELETE_STUDENT'; payload: string } // payload is studentId
   | { type: 'ADD_TEACHER'; payload: Teacher }
   | { type: 'UPDATE_TEACHER'; payload: Teacher }
-  | { type: 'DELETE_TEACHER'; payload: string }
+  | { type: 'DELETE_TEACHER'; payload: string } // payload is teacherId
   | { type: 'ADD_ANNOUNCEMENT'; payload: Announcement }
   | { type: 'UPDATE_ANNOUNCEMENT'; payload: Announcement }
   | { type: 'DELETE_ANNOUNCEMENT'; payload: string }
@@ -37,22 +41,26 @@ type Action =
   | { type: 'ADD_EXAM'; payload: Exam }
   | { type: 'UPDATE_EXAM'; payload: Exam }
   | { type: 'DELETE_EXAM'; payload: string }
-  | { type: 'SAVE_ATTENDANCE'; payload: { date: string; records: AttendanceRecord[] } };
-
+  | { type: 'SAVE_ATTENDANCE'; payload: { date: string; records: AttendanceRecord[] } }
+  | { type: 'SAVE_RESULTS'; payload: Result[] };
 
 const initialState: AppState = {
+  appReady: false,
   user: null,
-  students: MOCK_STUDENTS,
-  teachers: MOCK_TEACHERS,
-  announcements: MOCK_ANNOUNCEMENTS,
-  events: MOCK_EVENTS,
-  transportRoutes: MOCK_TRANSPORT_ROUTES,
-  exams: MOCK_EXAMS,
-  attendance: MOCK_ATTENDANCE,
+  students: [],
+  teachers: [],
+  announcements: [],
+  events: [],
+  transportRoutes: [],
+  exams: [],
+  attendance: {},
+  results: [],
 };
 
 const appReducer = (state: AppState, action: Action): AppState => {
   switch (action.type) {
+    case 'SET_INITIAL_DATA':
+        return { ...state, ...action.payload, appReady: true };
     case 'LOGIN':
       return { ...state, user: action.payload.user };
     case 'LOGOUT':
@@ -95,6 +103,10 @@ const appReducer = (state: AppState, action: Action): AppState => {
         return { ...state, exams: state.exams.filter(e => e.id !== action.payload) };
     case 'SAVE_ATTENDANCE':
         return { ...state, attendance: { ...state.attendance, [action.payload.date]: action.payload.records } };
+    case 'SAVE_RESULTS': {
+        const otherResults = state.results.filter(r => !action.payload.some(newR => newR.studentId === r.studentId && newR.examId === r.examId));
+        return { ...state, results: [...otherResults, ...action.payload] };
+    }
     default:
       return state;
   }
@@ -106,21 +118,64 @@ export const AppContext = createContext<{ state: AppState; dispatch: Dispatch<Ac
 });
 
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-    const [storedState, setStoredState] = useLocalStorage<AppState>('mmps-app-state', initialState);
+    const [state, dispatch] = useReducer(appReducer, initialState);
+    const [storedUser, setStoredUser] = useLocalStorage<User | null>('mmps-user', null);
 
-    const reducer = (state: AppState, action: Action): AppState => {
-        const newState = appReducer(state, action);
-        if (action.type === 'LOGIN') {
-            setStoredState({ ...newState, user: action.payload.user });
-        } else if (action.type === 'LOGOUT') {
-            setStoredState({ ...initialState, user: null});
-        } else {
-            setStoredState(newState);
+    useEffect(() => {
+        // On initial load, fetch all data from Supabase
+        const fetchInitialData = async () => {
+            try {
+                const [students, teachers, announcements, events, transportRoutes, exams, results] = await Promise.all([
+                    api.getStudents(),
+                    api.getTeachers(),
+                    api.getAnnouncements(),
+                    api.getEvents(),
+                    api.getTransportRoutes(),
+                    api.getExams(),
+                    api.getResults(),
+                ]);
+                dispatch({ type: 'SET_INITIAL_DATA', payload: { students, teachers, announcements, events, transportRoutes, exams, results } });
+            } catch (error) {
+                console.error("Failed to load initial data:", error);
+                 dispatch({ type: 'SET_INITIAL_DATA', payload: {} }); // Still mark app as ready
+            }
+        };
+
+        fetchInitialData();
+
+        // Handle Supabase Auth state changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_IN' && session) {
+                 const profile = await api.getProfile(session.user.id);
+                 if (profile) {
+                     const user: User = {
+                         id: session.user.id,
+                         name: profile.full_name || session.user.email || '',
+                         username: profile.username || '',
+                         role: profile.role as Role,
+                     };
+                     setStoredUser(user);
+                     dispatch({ type: 'LOGIN', payload: { user }});
+                 }
+            } else if (event === 'SIGNED_OUT') {
+                setStoredUser(null);
+                dispatch({ type: 'LOGOUT' });
+            }
+        });
+        
+        // Restore user from local storage on initial load
+        if (storedUser) {
+            dispatch({ type: 'LOGIN', payload: { user: storedUser } });
         }
-        return newState;
-    };
-  
-    const [state, dispatch] = useReducer(reducer, storedState);
-  
-    return <AppContext.Provider value={{ state, dispatch }}>{children}</AppContext.Provider>;
-  };
+
+        return () => {
+            subscription.unsubscribe();
+        };
+    }, [setStoredUser]);
+
+    return (
+        <AppContext.Provider value={{ state, dispatch }}>
+            {state.appReady ? children : <div className="flex items-center justify-center h-screen">Loading...</div>}
+        </AppContext.Provider>
+    );
+};

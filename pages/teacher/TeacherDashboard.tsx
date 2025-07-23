@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAppContext } from '../../hooks/useAppContext';
@@ -35,7 +36,8 @@ const TeacherDashboard: React.FC = () => {
     const { state } = useAppContext();
     const { user, exams } = state;
 
-    const teacher = state.teachers.find(t => t.id === user?.id);
+    const teacher = state.teachers.find(t => t.userId === user?.id);
+    const teacherExamsCount = teacher ? exams.filter(e => e.createdByTeacherId === teacher.id).length : 0;
 
     return (
         <div className="space-y-8">
@@ -46,8 +48,8 @@ const TeacherDashboard: React.FC = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <StatCard title="Subjects Taught" value={teacher?.subject || 'N/A'} icon={<BookOpen className="text-white" />} color="bg-brand-blue" />
-                <StatCard title="Exams Created" value={exams.filter(e => e.subject === teacher?.subject).length} icon={<FileUp className="text-white" />} color="bg-brand-orange" />
-                <StatCard title="Assigned Classes" value={3} icon={<ClipboardCheck className="text-white" />} color="bg-brand-pink" />
+                <StatCard title="Exams Created" value={teacherExamsCount} icon={<FileUp className="text-white" />} color="bg-brand-orange" />
+                <StatCard title="Assigned Classes" value={'N/A'} icon={<ClipboardCheck className="text-white" />} color="bg-brand-pink" />
             </div>
 
             <div>

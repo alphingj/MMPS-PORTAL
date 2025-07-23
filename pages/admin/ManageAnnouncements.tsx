@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../hooks/useAppContext';
 import { Announcement } from '../../types';
@@ -5,6 +6,7 @@ import Modal from '../../components/ui/Modal';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
 import { Plus, Edit, Trash2 } from '../../components/ui/Icons';
 import { ANNOUNCEMENT_CATEGORIES, ANNOUNCEMENT_PRIORITIES, ANNOUNCEMENT_AUDIENCES } from '../../constants';
+import * as api from '../../services/api';
 
 const AnnouncementForm = ({ announcement, onSave, onCancel }: { announcement?: Announcement | null, onSave: (data: Partial<Announcement>) => void, onCancel: () => void }) => {
     const [formData, setFormData] = useState<Partial<Announcement>>(
@@ -78,24 +80,35 @@ const ManageAnnouncements: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure you want to delete this announcement?')) {
-            dispatch({ type: 'DELETE_ANNOUNCEMENT', payload: id });
+            try {
+                await api.deleteAnnouncement(id);
+                dispatch({ type: 'DELETE_ANNOUNCEMENT', payload: id });
+            } catch (error) {
+                console.error("Failed to delete announcement:", error);
+                alert("Error: Could not delete announcement.");
+            }
         }
     };
 
-    const handleSave = (data: Partial<Announcement>) => {
-        if (editingAnnouncement) {
-            dispatch({ type: 'UPDATE_ANNOUNCEMENT', payload: { ...editingAnnouncement, ...data } as Announcement });
-        } else {
-            const newAnnouncement: Announcement = {
-                id: `ann${Date.now()}`,
-                date: new Date().toISOString().split('T')[0],
-                ...data
-            } as Announcement;
-            dispatch({ type: 'ADD_ANNOUNCEMENT', payload: newAnnouncement });
+    const handleSave = async (data: Partial<Announcement>) => {
+        try {
+            if (editingAnnouncement) {
+                const updated = await api.updateAnnouncement(editingAnnouncement.id, data);
+                if (updated) dispatch({ type: 'UPDATE_ANNOUNCEMENT', payload: updated });
+            } else {
+                const newAnnouncement = await api.addAnnouncement({
+                    date: new Date().toISOString().split('T')[0],
+                    ...data
+                });
+                if (newAnnouncement) dispatch({ type: 'ADD_ANNOUNCEMENT', payload: newAnnouncement });
+            }
+            setIsModalOpen(false);
+        } catch(error) {
+             console.error("Failed to save announcement:", error);
+             alert("Error: Could not save announcement.");
         }
-        setIsModalOpen(false);
     };
 
     return (

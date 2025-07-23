@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../hooks/useAppContext';
 import { ALL_CLASSES } from '../../constants';
@@ -5,18 +6,21 @@ import { FolderOpen } from '../../components/ui/Icons';
 
 const ViewResults: React.FC = () => {
     const { state } = useAppContext();
-    const { exams, students, /* results */ } = state; // Assuming results will be added to context
+    const { exams, students, results } = state;
     const [selectedExam, setSelectedExam] = useState('');
     const [selectedClass, setSelectedClass] = useState('');
-
-    // Mock results for now
-    const results: any[] = [];
 
     const filteredResults = useMemo(() => {
         return results
             .filter(r => selectedExam ? r.examId === selectedExam : true)
-            .filter(r => selectedClass ? students.find(s => s.id === r.studentId)?.class === selectedClass : true)
-    }, [results, selectedExam, selectedClass, students]);
+            .map(result => {
+                const student = students.find(s => s.id === result.studentId);
+                const exam = exams.find(e => e.id === result.examId);
+                return { ...result, student, exam };
+            })
+            .filter(r => r.student && r.exam) // Ensure we have student and exam info
+            .filter(r => selectedClass ? r.student.class === selectedClass : true);
+    }, [results, selectedExam, selectedClass, students, exams]);
 
     return (
         <div className="space-y-6">
@@ -50,14 +54,35 @@ const ViewResults: React.FC = () => {
                 {filteredResults.length > 0 ? (
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
-                            {/* Table content here */}
+                             <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Roll No.</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student Name</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Exam</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Class</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Marks</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {filteredResults.map(result => (
+                                    <tr key={result.id}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{result.student.rollNumber}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{result.student.fullName}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{result.exam.name} ({result.exam.subject})</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{result.student.class}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            <span className="font-semibold">{result.marksObtained}</span> / {result.exam.maxMarks}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
                         </table>
                     </div>
                 ) : (
                     <div className="text-center py-10">
                         <FolderOpen size={48} className="mx-auto text-gray-300" />
                         <h3 className="mt-2 text-sm font-medium text-gray-900">No Results Found</h3>
-                        <p className="mt-1 text-sm text-gray-500">No exam results have been uploaded yet.</p>
+                        <p className="mt-1 text-sm text-gray-500">No exam results match your current filters.</p>
                     </div>
                 )}
             </div>

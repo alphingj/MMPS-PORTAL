@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { useAppContext } from '../../hooks/useAppContext';
 import { SchoolEvent } from '../../types';
@@ -5,6 +6,7 @@ import Modal from '../../components/ui/Modal';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
 import { Search, Plus, Edit, Trash2, Calendar } from '../../components/ui/Icons';
 import { EVENT_CATEGORIES } from '../../constants';
+import * as api from '../../services/api';
 
 const EventForm = ({ event, onSave, onCancel }: { event?: SchoolEvent | null, onSave: (data: Partial<SchoolEvent>) => void, onCancel: () => void }) => {
     const [formData, setFormData] = useState<Partial<SchoolEvent>>(
@@ -76,7 +78,7 @@ const ManageEvents: React.FC = () => {
         return events.filter(e =>
             e.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
             e.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            e.venue.toLowerCase().includes(searchQuery.toLowerCase())
+            (e.venue && e.venue.toLowerCase().includes(searchQuery.toLowerCase()))
         );
     }, [events, searchQuery]);
 
@@ -90,24 +92,32 @@ const ManageEvents: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (window.confirm('Are you sure you want to delete this event?')) {
-            dispatch({ type: 'DELETE_EVENT', payload: id });
+            try {
+                await api.deleteEvent(id);
+                dispatch({ type: 'DELETE_EVENT', payload: id });
+            } catch (error) {
+                console.error("Failed to delete event:", error);
+                alert("Error: Could not delete event.");
+            }
         }
     };
     
-    const handleSave = (data: Partial<SchoolEvent>) => {
-        if (editingEvent) {
-            dispatch({ type: 'UPDATE_EVENT', payload: { ...editingEvent, ...data } as SchoolEvent });
-        } else {
-            const newEvent: SchoolEvent = {
-                id: `evt${Date.now()}`,
-                status: 'active',
-                ...data
-            } as SchoolEvent;
-            dispatch({ type: 'ADD_EVENT', payload: newEvent });
+    const handleSave = async (data: Partial<SchoolEvent>) => {
+        try {
+            if (editingEvent) {
+                const updated = await api.updateEvent(editingEvent.id, data);
+                if (updated) dispatch({ type: 'UPDATE_EVENT', payload: updated });
+            } else {
+                const newEvent = await api.addEvent(data);
+                if (newEvent) dispatch({ type: 'ADD_EVENT', payload: newEvent });
+            }
+            setIsModalOpen(false);
+        } catch (error) {
+            console.error("Failed to save event:", error);
+            alert("Error: Could not save event.");
         }
-        setIsModalOpen(false);
     };
 
     return (

@@ -5,15 +5,15 @@ import { Student } from '../../types';
 import Modal from '../../components/ui/Modal';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
 import { Search, Plus, Edit, Trash2 } from '../../components/ui/Icons';
+import * as api from '../../services/api';
 
 const StudentForm = ({ student, onSave, onCancel }: { student?: Student | null, onSave: (student: Partial<Student>) => void, onCancel: () => void }) => {
     const [formData, setFormData] = useState<Partial<Student>>(
-        student || { status: 'active' }
+        student || { status: 'active', rollNumber: '', fullName: '', email: '', class: '' }
     );
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value, type } = e.target;
-        // Format date correctly for state
         if (type === 'date') {
             const date = new Date(value);
             const formattedDate = date.toISOString().split('T')[0];
@@ -28,7 +28,6 @@ const StudentForm = ({ student, onSave, onCancel }: { student?: Student | null, 
         onSave(formData);
     };
     
-    // Helper to format date for input value
     const getInputValue = (dateStr: string | undefined) => {
         if (!dateStr) return '';
         try {
@@ -42,12 +41,20 @@ const StudentForm = ({ student, onSave, onCancel }: { student?: Student | null, 
         <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input label="Full Name" name="fullName" value={formData.fullName} onChange={handleChange} required />
-                <Input label="Roll Number" name="rollNumber" value={formData.rollNumber} onChange={handleChange} required />
+                <Input label="Roll Number (as Username)" name="rollNumber" value={formData.rollNumber} onChange={handleChange} required />
+                <Input label="Email Address" name="email" type="email" value={formData.email} onChange={handleChange} required />
+                 <Input 
+                    label="Login Password" 
+                    name="password" 
+                    type="password"
+                    placeholder={student ? "Leave blank to keep unchanged" : "Set initial password"}
+                    value={formData.password || ''} 
+                    onChange={handleChange} 
+                />
                 <Input label="Class" name="class" value={formData.class} onChange={handleChange} required />
                 <Input label="Section" name="section" value={formData.section} onChange={handleChange} />
                 <Input label="Parent's Name" name="parentName" value={formData.parentName} onChange={handleChange} />
                 <Input label="Parent's Phone" name="parentPhone" value={formData.parentPhone} onChange={handleChange} />
-                <Input label="Login Password" name="loginPassword" type="password" placeholder="Set a password for parent login" value={formData.loginPassword} onChange={handleChange} />
                 <Input label="Address" name="address" value={formData.address} onChange={handleChange} />
                 <Input label="Date of Birth" name="dateOfBirth" type="date" value={getInputValue(formData.dateOfBirth)} onChange={handleChange} />
                 <Input label="Admission Date" name="admissionDate" type="date" value={getInputValue(formData.admissionDate)} onChange={handleChange} />
@@ -92,33 +99,37 @@ const ManageStudents: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleDeleteStudent = (studentId: string) => {
-        if(window.confirm('Are you sure you want to permanently delete this student?')) {
-            dispatch({ type: 'DELETE_STUDENT', payload: studentId });
+    const handleDeleteStudent = async (student: Student) => {
+        if(window.confirm('Are you sure you want to permanently delete this student record and their login access?')) {
+            try {
+                await api.deleteStudent(student);
+                dispatch({ type: 'DELETE_STUDENT', payload: student.id });
+            } catch (error) {
+                console.error("Failed to delete student:", error);
+                alert(`Error: Could not delete student. ${(error as Error).message}`);
+            }
         }
     };
     
-    const handleSaveStudent = (studentData: Partial<Student>) => {
-        if (editingStudent) {
-            dispatch({ type: 'UPDATE_STUDENT', payload: { ...editingStudent, ...studentData } });
-        } else {
-             const newStudent: Student = {
-                id: `s${Date.now()}`,
-                rollNumber: '',
-                fullName: '',
-                class: '',
-                section: '',
-                parentName: '',
-                parentPhone: '',
-                address: '',
-                dateOfBirth: '',
-                admissionDate: '',
-                status: 'active',
-                ...studentData,
-            };
-            dispatch({ type: 'ADD_STUDENT', payload: newStudent });
+    const handleSaveStudent = async (studentData: Partial<Student>) => {
+        try {
+            if (editingStudent) {
+                const updatedStudent = await api.updateStudent({ ...editingStudent, ...studentData });
+                if (updatedStudent) {
+                    dispatch({ type: 'UPDATE_STUDENT', payload: updatedStudent });
+                }
+            } else {
+                const newStudent = await api.addStudent(studentData);
+                if (newStudent) {
+                    dispatch({ type: 'ADD_STUDENT', payload: newStudent });
+                }
+            }
+            setIsModalOpen(false);
+            setEditingStudent(null);
+        } catch (error) {
+            console.error("Failed to save student:", error);
+            alert(`Error: Could not save student data. ${(error as Error).message}`);
         }
-        setIsModalOpen(false);
     };
 
     return (
@@ -172,7 +183,7 @@ const ManageStudents: React.FC = () => {
                                             <DropdownMenuItem onClick={() => handleEditStudent(student)}>
                                                 <Edit size={16} className="mr-2" /> Edit
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleDeleteStudent(student.id)} className="text-red-600">
+                                            <DropdownMenuItem onClick={() => handleDeleteStudent(student)} className="text-red-600">
                                                 <Trash2 size={16} className="mr-2" /> Delete Permanently
                                             </DropdownMenuItem>
                                         </DropdownMenu>
@@ -194,7 +205,7 @@ const ManageStudents: React.FC = () => {
                 <StudentForm
                     student={editingStudent}
                     onSave={handleSaveStudent}
-                    onCancel={() => setIsModalOpen(false)}
+                    onCancel={() => { setIsModalOpen(false); setEditingStudent(null); }}
                 />
             </Modal>
         </div>

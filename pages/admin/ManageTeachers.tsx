@@ -6,11 +6,15 @@ import Modal from '../../components/ui/Modal';
 import DropdownMenu, { DropdownMenuItem } from '../../components/ui/DropdownMenu';
 import { Search, Plus, Edit, Trash2 } from '../../components/ui/Icons';
 import { PERMISSIONS_LIST } from '../../constants';
+import * as api from '../../services/api';
 
 const TeacherForm = ({ teacher, onSave, onCancel }: { teacher?: Teacher | null, onSave: (teacher: Partial<Teacher>) => void, onCancel: () => void }) => {
     const [formData, setFormData] = useState<Partial<Teacher>>(
         teacher || { 
-            status: 'active', 
+            status: 'active',
+            username: '',
+            fullName: '',
+            email: '',
             permissions: {
                 manageStudents: false,
                 manageTeachers: false,
@@ -43,11 +47,6 @@ const TeacherForm = ({ teacher, onSave, onCancel }: { teacher?: Teacher | null, 
             },
         }));
     };
-    
-    const generatePassword = () => {
-        const randomPass = Math.random().toString(36).slice(-8);
-        setFormData({ ...formData, password: randomPass });
-    }
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -68,28 +67,29 @@ const TeacherForm = ({ teacher, onSave, onCancel }: { teacher?: Teacher | null, 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input label="Full Name" name="fullName" value={formData.fullName || ''} onChange={handleChange} required />
                 <Input label="Employee ID" name="employeeId" value={formData.employeeId || ''} onChange={handleChange} required />
+                <Input label="Email Address" name="email" type="email" value={formData.email || ''} onChange={handleChange} required />
                 <Input label="Subject" name="subject" value={formData.subject || ''} onChange={handleChange} />
                 <Input label="Phone" name="phone" value={formData.phone || ''} onChange={handleChange} />
-                <Input label="Email" name="email" type="email" value={formData.email || ''} onChange={handleChange} />
                 <Input label="Qualification" name="qualification" value={formData.qualification || ''} onChange={handleChange} />
                 <Input label="Experience (years)" name="experience" type="number" value={formData.experience || 0} onChange={handleChange} />
                 <Input label="Joining Date" name="joiningDate" type="date" value={getInputValue(formData.joiningDate)} onChange={handleChange} />
             </div>
 
             <div className="border-t pt-6">
-                <h3 className="text-lg font-medium text-gray-900">Credentials & Permissions</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                     <Input label="Username" name="username" value={formData.username || ''} onChange={handleChange} required />
-                     <div>
-                         <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                         <div className="flex items-center space-x-2">
-                            <input name="password" type="text" value={formData.password || ''} onChange={handleChange} className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-brand-purple focus:border-brand-purple sm:text-sm" />
-                            <button type="button" onClick={generatePassword} className="px-3 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 whitespace-nowrap">Generate</button>
-                         </div>
-                     </div>
+                 <h3 className="text-lg font-medium text-gray-900 mb-4">Credentials & Permissions</h3>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Input label="Username" name="username" value={formData.username || ''} onChange={handleChange} required />
+                    <Input 
+                        label="Login Password" 
+                        name="password" 
+                        type="password"
+                        placeholder={teacher ? "Leave blank to keep unchanged" : "Set initial password"}
+                        value={formData.password || ''} 
+                        onChange={handleChange} 
+                    />
                 </div>
-                 <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Permissions</label>
+                 <div className="mt-6">
+                    <h4 className="text-md font-medium text-gray-800 mb-2">Assign Permissions</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         {PERMISSIONS_LIST.map(permission => (
                              <label key={permission.id} className="flex items-center">
@@ -133,7 +133,7 @@ const ManageTeachers: React.FC = () => {
         return teachers.filter(t => 
             t.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
             t.employeeId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            t.subject.toLowerCase().includes(searchQuery.toLowerCase())
+            (t.subject && t.subject.toLowerCase().includes(searchQuery.toLowerCase()))
         );
     }, [teachers, searchQuery]);
 
@@ -147,39 +147,37 @@ const ManageTeachers: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleDeleteTeacher = (teacherId: string) => {
-        if(window.confirm('Are you sure you want to permanently delete this teacher?')) {
-            dispatch({ type: 'DELETE_TEACHER', payload: teacherId });
+    const handleDeleteTeacher = async (teacher: Teacher) => {
+        if(window.confirm('Are you sure you want to permanently delete this teacher record and their login access?')) {
+            try {
+                await api.deleteTeacher(teacher);
+                dispatch({ type: 'DELETE_TEACHER', payload: teacher.id });
+            } catch (error) {
+                console.error("Failed to delete teacher:", error);
+                alert(`Error: Could not delete teacher. ${(error as Error).message}`);
+            }
         }
     };
     
-    const handleSaveTeacher = (teacherData: Partial<Teacher>) => {
-        if (editingTeacher) {
-            dispatch({ type: 'UPDATE_TEACHER', payload: { ...editingTeacher, ...teacherData } });
-        } else {
-            const newTeacher: Teacher = {
-                id: `t${Date.now()}`,
-                employeeId: '',
-                fullName: '',
-                subject: '',
-                phone: '',
-                email: '',
-                qualification: '',
-                experience: 0,
-                joiningDate: '',
-                username: '',
-                password: 'password',
-                status: 'active',
-                permissions: {
-                    manageStudents: false, manageTeachers: false, manageAnnouncements: false,
-                    manageEvents: false, manageExams: true, manageAttendance: true,
-                    viewAllResults: false, fullAdminAccess: false,
-                },
-                ...teacherData,
-            };
-            dispatch({ type: 'ADD_TEACHER', payload: newTeacher });
+    const handleSaveTeacher = async (teacherData: Partial<Teacher>) => {
+        try {
+            if (editingTeacher) {
+                const updatedTeacher = await api.updateTeacher({...editingTeacher, ...teacherData});
+                if (updatedTeacher) {
+                    dispatch({ type: 'UPDATE_TEACHER', payload: updatedTeacher });
+                }
+            } else {
+                const newTeacher = await api.addTeacher(teacherData);
+                if (newTeacher) {
+                    dispatch({ type: 'ADD_TEACHER', payload: newTeacher });
+                }
+            }
+            setIsModalOpen(false);
+            setEditingTeacher(null);
+        } catch (error) {
+            console.error("Failed to save teacher:", error);
+            alert(`Error: Could not save teacher data. ${(error as Error).message}`);
         }
-        setIsModalOpen(false);
     };
 
     return (
@@ -233,7 +231,7 @@ const ManageTeachers: React.FC = () => {
                                             <DropdownMenuItem onClick={() => handleEditTeacher(teacher)}>
                                                 <Edit size={16} className="mr-2" /> Edit
                                             </DropdownMenuItem>
-                                            <DropdownMenuItem onClick={() => handleDeleteTeacher(teacher.id)} className="text-red-600">
+                                            <DropdownMenuItem onClick={() => handleDeleteTeacher(teacher)} className="text-red-600">
                                                 <Trash2 size={16} className="mr-2" /> Delete Permanently
                                             </DropdownMenuItem>
                                         </DropdownMenu>
@@ -255,7 +253,7 @@ const ManageTeachers: React.FC = () => {
                 <TeacherForm
                     teacher={editingTeacher}
                     onSave={handleSaveTeacher}
-                    onCancel={() => setIsModalOpen(false)}
+                    onCancel={() => { setIsModalOpen(false); setEditingTeacher(null); }}
                 />
             </Modal>
         </div>

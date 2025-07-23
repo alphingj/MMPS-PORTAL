@@ -33,7 +33,7 @@ const DropdownMenu: React.FC<DropdownMenuProps> = ({ children }) => {
         <MoreVertical size={20} />
       </button>
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 border border-gray-200">
+        <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-20 border border-gray-200">
           {React.Children.map(children, child => {
             if (!React.isValidElement<{ onClick?: () => void }>(child)) {
               return child;

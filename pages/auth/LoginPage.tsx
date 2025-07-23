@@ -1,54 +1,15 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { Role, User as UserType } from '../../types';
+import { Role } from '../../types';
 import { useAppContext } from '../../hooks/useAppContext';
-import { MOCK_ADMIN, MOCK_TEACHERS, MOCK_STUDENTS } from '../../data/mock';
 import { Shield, GraduationCap, User, ArrowRight, Eye, EyeOff, ChevronLeft } from '../../components/ui/Icons';
-
-/**
- * Simulates calling a backend API to authenticate a user.
- * In a real app, this would be an actual fetch/axios call to your server.
- * @param role The user's role.
- * @param username The username or identifier.
- * @param password The password.
- * @returns A promise that resolves to the user object or null.
- */
-const authenticateUser = async (role: Role, username: string, password: string): Promise<UserType | null> => {
-    // Simulate network delay
-    await new Promise(res => setTimeout(res, 500));
-
-    switch (role) {
-        case Role.Admin:
-            if (username === 'principal@mmps' && password === 'Moby@2025_') {
-                const adminData = MOCK_ADMIN;
-                return { id: adminData.id, name: adminData.name, role: Role.Admin, username: adminData.username };
-            }
-            break;
-        case Role.Teacher:
-            const teacher = MOCK_TEACHERS.find(t => t.username === username);
-            // Teacher password check (for mock purposes)
-            if (teacher && password === 'password') {
-                return { id: teacher.id, name: teacher.fullName, role: Role.Teacher, username: teacher.username, permissions: teacher.permissions };
-            }
-            break;
-        case Role.Student:
-            const student = MOCK_STUDENTS.find(s => s.rollNumber === username);
-             // Student password check (for mock purposes)
-            if (student && password === 'password') {
-                return { id: student.id, name: student.fullName, role: Role.Student, username: student.rollNumber };
-            }
-            break;
-    }
-    
-    // If no match is found
-    return null;
-};
-
+import * as api from '../../services/api';
 
 const LoginPage: React.FC = () => {
     const { role } = useParams<{ role: string }>();
     const navigate = useNavigate();
-    const { dispatch } = useAppContext();
+    const { state } = useAppContext();
 
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -62,30 +23,24 @@ const LoginPage: React.FC = () => {
         }
     }, [role, navigate]);
 
+    useEffect(() => {
+        if (state.user) {
+            navigate(`/${state.user.role}/dashboard`);
+        }
+    }, [state.user, navigate]);
+
     const pageConfig = {
         [Role.Admin]: {
             icon: <Shield className="w-10 h-10 text-brand-purple" />,
             title: 'Admin Portal',
-            subtitle: 'Mary Matha Public School',
-            usernameLabel: 'Email / Username',
-            passwordLabel: 'Password',
-            helpText: 'Contact IT administrator for login access'
         },
         [Role.Teacher]: {
             icon: <GraduationCap className="w-10 h-10 text-brand-green" />,
             title: 'Teacher Portal',
-            subtitle: 'Mary Matha Public School',
-            usernameLabel: 'Username',
-            passwordLabel: 'Password',
-            helpText: 'Contact admin for login credentials'
         },
         [Role.Student]: {
             icon: <User className="w-10 h-10 text-brand-pink" />,
             title: 'Parent / Student Portal',
-            subtitle: 'Enter your credentials to access the dashboard.',
-            usernameLabel: "Enter your child's roll number",
-            passwordLabel: 'Enter password set by school',
-            helpText: 'Login issue? Please contact the school office.'
         }
     };
 
@@ -97,16 +52,17 @@ const LoginPage: React.FC = () => {
         setIsLoading(true);
 
         try {
-            const user = await authenticateUser(role as Role, username, password);
+            // The API layer now handles the logic for all roles
+            const user = await api.loginUser(username, password);
 
-            if (user) {
-                dispatch({ type: 'LOGIN', payload: { user } });
-                navigate(`/${role}/dashboard`);
-            } else {
-                setError('Invalid credentials. Please try again.');
+            if (!user) {
+                 setError('Invalid credentials. Please try again.');
             }
+            // The AppContext's onAuthStateChange listener will handle the successful login and redirect
         } catch (err) {
-            setError('An unexpected error occurred. Please try again later.');
+            console.error(err);
+            const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred.';
+            setError(errorMessage);
         } finally {
             setIsLoading(false);
         }
@@ -128,12 +84,12 @@ const LoginPage: React.FC = () => {
                         {currentConfig.icon}
                     </div>
                     <h1 className="text-2xl font-bold text-gray-800">{currentConfig.title}</h1>
-                    <p className="text-gray-500 mt-1">{currentConfig.subtitle}</p>
+                    <p className="text-gray-500 mt-1">Please enter your credentials to log in.</p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-6">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">{currentConfig.usernameLabel}</label>
+                        <label className="block text-sm font-medium text-gray-700">Username / Roll Number</label>
                         <input
                             type="text"
                             value={username}
@@ -144,7 +100,7 @@ const LoginPage: React.FC = () => {
                         />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700">{currentConfig.passwordLabel}</label>
+                        <label className="block text-sm font-medium text-gray-700">Password</label>
                         <div className="relative">
                             <input
                                 type={showPassword ? 'text' : 'password'}
@@ -172,7 +128,7 @@ const LoginPage: React.FC = () => {
                     </button>
                 </form>
 
-                <p className="mt-8 text-center text-sm text-gray-500">{currentConfig.helpText}</p>
+                <p className="mt-8 text-center text-sm text-gray-500">Login issues? Please contact the school administrator.</p>
             </div>
         </div>
     );
